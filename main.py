@@ -1,6 +1,6 @@
 import scapy.all as scapy
 import random
-from fw import FW
+from FW import FW
 
 
 PRIVATE_LEG = "enp0s8"
@@ -10,6 +10,7 @@ NAT_LEG_IP = "192.168.131.4"
 LOCALHOST = "127.0.0.1"
 MIN_PORT = 1024
 MAX_PORT = 65535
+FW_CONF_PATH = './fw.conf'
 
 
 class Session:
@@ -75,9 +76,8 @@ class Session:
         return (None, None)
 
 
-def nat_logic(packet):
+def nat_logic(packet, fw):
     packet = packet[0]
-    fw = FW(bad_src_port=12345, bad_udp=True)
     # for sending packets on the private leg - convert and send on the NAT leg
     if packet.sniffed_on == PRIVATE_LEG and packet['IP'].src == PRIVATE_LEG_IP:
         session = Session(packet)
@@ -92,7 +92,9 @@ def nat_logic(packet):
         scapy.sendp(packet, iface=NAT_LEG, verbose=0)
     # for receiving packets on the NAT leg - convert and send on the private leg
     elif packet.sniffed_on == NAT_LEG and packet['IP'].dst == NAT_LEG_IP:
-        if fw.should_drop_packet(packet):
+        invalid_status, invalid_fields = fw.should_drop_packet(packet)
+        if invalid_status:
+            print(f"caught packet with fields:\n{invalid_fields}")
             return
         dst_ip, dst_port = Session.get_session_src(packet)
         if dst_ip is None:
@@ -106,7 +108,8 @@ def nat_logic(packet):
 
 
 def main():
-    scapy.sniff(iface=[PRIVATE_LEG, NAT_LEG], prn=nat_logic, filter="ip")
+    fw = FW(FW_CONF_PATH)
+    scapy.sniff(iface=[PRIVATE_LEG, NAT_LEG], prn=lambda packet: nat_logic(packet, fw), filter="ip")
 
 
 if __name__ == "__main__":
