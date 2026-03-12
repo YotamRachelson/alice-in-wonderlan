@@ -3,6 +3,7 @@ import scapy.all as scapy
 
 LEG_1 = "enp0s8"
 LEG_2 = "enp0s9"
+BROADCAST_MAC = "ff:ff:ff:ff:ff:ff"
 
 
 class Router:
@@ -18,6 +19,14 @@ class Router:
             if packet['IP'].dst in subnet:
                 packet.ttl -= 1
                 packet.src = iface.mac
+                # if mac address could be resolved and packet was not destined to the router itself- resolve, otherwise drop packet
+                dst_mac = scapy.getmacbyip(packet['IP'].dst)
+                # dst_mac == BROADCAST_MAC if the packet dst ip was of one of the router interfaces - we dont want it to be forwarded in this case
+                if dst_mac == BROADCAST_MAC or dst_mac is None:
+                    print("dropped packet - couldn't resolve mac address properly")
+                    return
+                else:
+                    packet.dst = dst_mac
                 scapy.sendp(packet, iface=iface.name, verbose=False)
                 print(f"routed \'{packet}\' to {subnet}/{subnet.mask}")
 
